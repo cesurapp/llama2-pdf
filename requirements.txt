@@ -1,0 +1,12 @@
+torch
+sentence-transformers
+langchain
+llama-cpp-python
+chromadb
+huggingface_hub
+pypdf
+ocrmypdf
+flask
+flask-cors
+waitress
+python-dotenv

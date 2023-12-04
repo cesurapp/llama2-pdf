@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF Analyzer</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900|Material+Icons" rel="stylesheet" type="text/css"/>
+    <link href="https://cdn.jsdelivr.net/npm/quasar@2.13.0/dist/quasar.prod.css" rel="stylesheet" type="text/css"/>
+  </head>
+  <body>
+    <!-- App Root -->
+    <div id="app">
+      <q-table
+        class="my-sticky-header-table"
+        flat
+        bordered
+        :rows="rows"
+        :loading="loading && !customDialog"
+        :pagination="{
+          sortBy: 'desc',
+          descending: false,
+          page: 1,
+          rowsPerPage: 1000
+        }"
+      >
+        <template v-slot:top>
+          <h5 class="q-pa-none q-my-none q-mr-auto">PDF Analyzer</h5>
+
+          <!-- Custom PDF -->
+          <q-btn color="positive" class="q-mr-md" :disable="loading" label="Custom PDF" @click="customDialog = true"></q-btn>
+          <q-dialog v-model="customDialog" :persistent="true">
+            <q-card style="width: 700px; max-width: 80vw;">
+              <q-card-section class="row items-center q-pb-none">
+                <div class="text-h6">Custom PDF Analyzer</div>
+                <q-space></q-space>
+                <q-btn icon="close" flat round dense v-close-popup />
+              </q-card-section>
+
+              <q-card-section>
+                <q-file :disable="loading" outline v-model="customFile" counter label="Select .pdf file">
+                  <template v-slot:prepend>
+                    <q-icon name="attach_file" />
+                  </template>
+                </q-file>
+
+                <div class="q-mt-md flex full-width no-wrap">
+                  <q-input :disable="loading" @keyup.enter="sendCustomQuestion" class="full-width" v-model="customQuestion" label="Question">
+                    <template v-slot:prepend>
+                      <q-icon name="question_mark" />
+                    </template>
+                    <template v-slot:append>
+                      <q-btn :disable="loading" :loading="loading" color="positive" icon="send" flat @click="sendCustomQuestion"></q-btn>
+                    </template>
+                  </q-input>
+                </div>
+
+                <div v-if="customAnswer !== ''" class="q-mt-lg q-pa-md rounded-borders flex full-width justify-between" style="border: 1px dashed rgb(11 99 6 / 30%); background: rgb(8 145 0 / 9%);">
+                  <span>{{ customAnswer }}</span>
+                  <span class="q-ml-sm text-subtitle2">{{ customElapsed }} sn</span>
+                </div>
+              </q-card-section>
+            </q-card>
+          </q-dialog>
+
+          <!-- Config Dialog -->
+          <q-dialog v-model="configDialog">
+            <q-card style="width: 600px; max-width: 80vw;">
+              <q-card-section class="row items-center q-pb-none">
+                <div class="text-h6">Batch Questions</div>
+                <q-space></q-space>
+                <q-btn icon="add" flat dense round class="q-mr-sm" color="primary" @click="addQuestions"></q-btn>
+                <q-btn icon="close" flat dense round v-close-popup />
+              </q-card-section>
+
+              <q-card-section>
+                <div v-for="val, key in questions" :key="key" class="flex no-wrap">
+                  <q-input v-model="questions[key]" dense class="full-width"></q-input>
+                  <q-btn  flat dense icon="delete" class="q-ml-sm" color="negative" @click="() => delete questions[key]"></q-btn>
+                </div>
+              </q-card-section>
+            </q-card>
+          </q-dialog>
+
+          <!-- Add PDF -->
+          <q-btn color="primary" class="q-px-xl q-py-xs" :disable="loading" :loading="loading && !customDialog" label="Add PDF" @click="$refs.files.click()">
+            <template v-slot:loading>{{ bacthCount }} Processing...</template>
+          </q-btn>
+          <input type="file" multiple ref="files" v-on:change="onFilesChange" style="display: none;">
+          <q-btn flat color="grey" class="q-ml-sm" :disable="loading" icon="settings" @click="configDialog = true"></q-btn>
+        </template>
+      </q-table>
+    </div>
+
+    <!-- Vue App -->
+    <script src="https://cdn.jsdelivr.net/npm/quasar@2.13.0/dist/quasar.umd.prod.js"></script>
+    <script>
+      const app = Vue.createApp({
+        data() {
+          return {
+            customDialog: false,
+            customFile: null,
+            customQuestion: "What is person's full name?",
+            customAnswer: '',
+            customElapsed: '',
+            configDialog: false,
+            api: 'http://127.0.0.1:3000/ask',
+            loading: false,
+            rows: [],
+            bacthCount: 0,
+            questions: {
+              "owner":"What is the full name of the document owner?",
+              "current_job":"What job does he work in?",
+              "langs":"Which programming languages does it know?",
+              "skills":"Briefly list your skills using commas",
+              "work_city":"In which city do you work now?",
+              "experince":"How many years of work experience does he have?",
+              "old":"How old is he",
+              "most_skills":"What are the 3 most important skills, just list them?"
+            }
+          };
+        },
+        methods:{
+          async onFilesChange(e) {
+            var files = e.target.files || e.dataTransfer.files;
+            if (!files.length)
+              return;
+
+            this.loading = true;
+            this.bacthCount = files.length
+            
+            for (const file of files) {
+              await this.loadPdf(file.name, await this.toFilebase64(file))
+              this.bacthCount--;
+            }
+
+            this.loading = false;
+          },
+          async toFilebase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+            })
+          },
+          addQuestions() {
+            this.$q.dialog({
+              title: 'Enter the ID for the question.',
+              prompt: {
+                model: '',
+                placeholder: "full_name",
+                type: 'text'
+              },
+            }).onOk((data) => {
+              this.questions[data] = 'New Question...'
+            })
+          },
+          async loadPdf(fileName, base64Context) {
+            await fetch(this.api, {
+              method: 'POST',
+              headers: {'content-type': 'application/json', 'Accept': 'application/json'},
+              body: JSON.stringify({
+                "pdfContextBase64": base64Context.replace('data:application/pdf;base64,', ''),
+                "prompts": this.questions
+              })
+            })
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Network error');
+              }
+              return response.json();
+            })
+            .then(data => {
+              this.rows.push({'id': fileName, ...data['answers']});
+            })
+            .catch(error => {
+              const cloned = {...this.questions}
+              for (const [key, value] of Object.entries(cloned)) {
+                cloned[key] = 'error'
+              }
+
+              this.rows.push({'id': fileName, ...cloned})
+            });
+          },
+          async sendCustomQuestion() {
+            this.loading = true;
+            this.customAnswer = '';
+            const t0 = performance.now();
+
+            let fileContent = await this.toFilebase64(this.customFile);
+            await fetch(this.api, {
+              method: 'POST',
+              headers: {'content-type': 'application/json', 'Accept': 'application/json'},
+              body: JSON.stringify({
+                "pdfContextBase64": fileContent.replace('data:application/pdf;base64,', ''),
+                "prompts": [this.customQuestion]
+              })
+            })
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Network error');
+              }
+              return response.json();
+            })
+            .then(data => this.customAnswer = data['answers'][0])
+            .catch(error => this.customAnswer = '!!error!!');
+
+            this.loading = false;
+            this.customElapsed = ((performance.now() - t0) / 1000).toFixed(2)
+          }
+        }
+      });
+
+      app.use(Quasar);
+      app.mount("#app");
+    </script>
+
+    <!-- Custom Style -->
+    <style>
+      .my-sticky-header-table {
+        height: 100vh;
+        border: none;
+        border-radius: 0;
+      }
+      .my-sticky-header-table .q-table__top,
+      .my-sticky-header-table .q-table__bottom,
+      .my-sticky-header-table thead tr:first-child th {
+        background-color: #f3f3f3;
+      }
+      .my-sticky-header-table thead tr th {
+        position: sticky;
+        z-index: 1;
+      }
+      .my-sticky-header-table thead tr:first-child th {
+        top: 0;
+      }
+      .my-sticky-header-table.q-table--loading thead tr:last-child th {
+        top: 48px;
+      }
+      .my-sticky-header-table tbody {
+        scroll-margin-top: 48px;
+      }
+    </style>
+  </body>
+</html>
