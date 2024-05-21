@@ -75,7 +75,7 @@ endpoint: http://127.0.0.1:3000/ask
 RAW JSON Content:
 
 {
-    "textContext": "My name is Ramazan Apaydın",
+    "textContext": "My name is Cesur Apaydın",
     "pdfContextBase64": "",
     "prompts": [
         "What is person's full name?",
